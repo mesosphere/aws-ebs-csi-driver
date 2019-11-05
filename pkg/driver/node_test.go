@@ -652,6 +652,260 @@ func TestNodeUnstageVolume(t *testing.T) {
 	}
 }
 
+func TestNodeExpandVolume(t *testing.T) {
+	targetPath := "/test/path"
+	devicePath := "/dev/fake"
+	deviceMountPath := "/test-ebs"
+
+	testCases := []struct {
+		name     string
+		testFunc func(t *testing.T)
+	}{
+		{
+			name: "success normal",
+			testFunc: func(t *testing.T) {
+				mockCtl := gomock.NewController(t)
+				defer mockCtl.Finish()
+
+				mockMetadata := mocks.NewMockMetadataService(mockCtl)
+				mockResizer := mocks.NewMockResizer(mockCtl)
+				mockMounter := mocks.NewMockMounter(mockCtl)
+
+				awsDriver := &nodeService{
+					metadata: mockMetadata,
+					mounter:  mockMounter,
+					inFlight: internal.NewInFlight(),
+					resizer:  mockResizer,
+				}
+
+				mockMounter.EXPECT().Run(gomock.Any(), gomock.Any()).Return([]byte("/dev/fake"), nil)
+				mockResizer.EXPECT().Resize(gomock.Eq(devicePath), gomock.Eq(deviceMountPath)).Return(true, nil)
+
+				req := &csi.NodeExpandVolumeRequest{
+					StagingTargetPath: targetPath,
+					VolumeId:          "vol-test",
+					VolumePath:        deviceMountPath,
+					VolumeCapability: &csi.VolumeCapability{
+						AccessType: &csi.VolumeCapability_Mount{
+							Mount: &csi.VolumeCapability_MountVolume{},
+						},
+						AccessMode: &csi.VolumeCapability_AccessMode{
+							Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+						},
+					},
+				}
+
+				_, err := awsDriver.NodeExpandVolume(context.TODO(), req)
+				if err != nil {
+					t.Fatalf("Expect no error but got: %v", err)
+				}
+			},
+		},
+		{
+			name: "fail block device",
+			testFunc: func(t *testing.T) {
+				mockCtl := gomock.NewController(t)
+				defer mockCtl.Finish()
+
+				mockMetadata := mocks.NewMockMetadataService(mockCtl)
+
+				awsDriver := &nodeService{
+					metadata: mockMetadata,
+					inFlight: internal.NewInFlight(),
+				}
+
+				req := &csi.NodeExpandVolumeRequest{
+					StagingTargetPath: targetPath,
+					VolumeId:          "vol-test",
+					VolumePath:        deviceMountPath,
+					VolumeCapability: &csi.VolumeCapability{
+						AccessType: &csi.VolumeCapability_Block{
+							Block: &csi.VolumeCapability_BlockVolume{},
+						},
+						AccessMode: &csi.VolumeCapability_AccessMode{
+							Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+						},
+					},
+				}
+
+				_, err := awsDriver.NodeExpandVolume(context.TODO(), req)
+				expectErr(t, err, codes.FailedPrecondition)
+			},
+		},
+		{
+			name: "fail no mount",
+			testFunc: func(t *testing.T) {
+				mockCtl := gomock.NewController(t)
+				defer mockCtl.Finish()
+
+				mockMetadata := mocks.NewMockMetadataService(mockCtl)
+
+				awsDriver := &nodeService{
+					metadata: mockMetadata,
+					inFlight: internal.NewInFlight(),
+				}
+
+				req := &csi.NodeExpandVolumeRequest{
+					StagingTargetPath: targetPath,
+					VolumeId:          "vol-test",
+					VolumePath:        deviceMountPath,
+					VolumeCapability: &csi.VolumeCapability{
+						AccessType: &csi.VolumeCapability_Mount{},
+						AccessMode: &csi.VolumeCapability_AccessMode{
+							Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+						},
+					},
+				}
+
+				_, err := awsDriver.NodeExpandVolume(context.TODO(), req)
+				expectErr(t, err, codes.InvalidArgument)
+			},
+		},
+		{
+			name: "fail empty device path",
+			testFunc: func(t *testing.T) {
+				mockCtl := gomock.NewController(t)
+				defer mockCtl.Finish()
+
+				mockMetadata := mocks.NewMockMetadataService(mockCtl)
+				mockMounter := mocks.NewMockMounter(mockCtl)
+
+				awsDriver := &nodeService{
+					metadata: mockMetadata,
+					mounter:  mockMounter,
+					inFlight: internal.NewInFlight(),
+				}
+
+				mockMounter.EXPECT().Run(gomock.Any(), gomock.Any()).Return([]byte(""), nil)
+
+				req := &csi.NodeExpandVolumeRequest{
+					StagingTargetPath: targetPath,
+					VolumeId:          "vol-test",
+					VolumePath:        deviceMountPath,
+					VolumeCapability: &csi.VolumeCapability{
+						AccessType: &csi.VolumeCapability_Mount{
+							Mount: &csi.VolumeCapability_MountVolume{},
+						},
+						AccessMode: &csi.VolumeCapability_AccessMode{
+							Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+						},
+					},
+				}
+
+				_, err := awsDriver.NodeExpandVolume(context.TODO(), req)
+				expectErr(t, err, codes.Internal)
+			},
+		},
+		{
+			name: "fail no volume id",
+			testFunc: func(t *testing.T) {
+				mockCtl := gomock.NewController(t)
+				defer mockCtl.Finish()
+
+				mockMetadata := mocks.NewMockMetadataService(mockCtl)
+
+				awsDriver := &nodeService{
+					metadata: mockMetadata,
+					inFlight: internal.NewInFlight(),
+				}
+
+				req := &csi.NodeExpandVolumeRequest{
+					StagingTargetPath: targetPath,
+					VolumePath:        deviceMountPath,
+					VolumeCapability: &csi.VolumeCapability{
+						AccessType: &csi.VolumeCapability_Mount{},
+						AccessMode: &csi.VolumeCapability_AccessMode{
+							Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+						},
+					},
+				}
+
+				_, err := awsDriver.NodeExpandVolume(context.TODO(), req)
+				expectErr(t, err, codes.InvalidArgument)
+			},
+		},
+		{
+			name: "fail cannot determine device path",
+			testFunc: func(t *testing.T) {
+				mockCtl := gomock.NewController(t)
+				defer mockCtl.Finish()
+
+				mockMetadata := mocks.NewMockMetadataService(mockCtl)
+				mockResizer := mocks.NewMockResizer(mockCtl)
+				mockMounter := mocks.NewMockMounter(mockCtl)
+
+				awsDriver := &nodeService{
+					metadata: mockMetadata,
+					mounter:  mockMounter,
+					inFlight: internal.NewInFlight(),
+					resizer:  mockResizer,
+				}
+
+				mockMounter.EXPECT().Run(gomock.Any(), gomock.Any()).Return([]byte(""), errors.New("error finding device path"))
+
+				req := &csi.NodeExpandVolumeRequest{
+					StagingTargetPath: targetPath,
+					VolumeId:          "vol-test",
+					VolumePath:        deviceMountPath,
+					VolumeCapability: &csi.VolumeCapability{
+						AccessType: &csi.VolumeCapability_Mount{
+							Mount: &csi.VolumeCapability_MountVolume{},
+						},
+						AccessMode: &csi.VolumeCapability_AccessMode{
+							Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+						},
+					},
+				}
+
+				_, err := awsDriver.NodeExpandVolume(context.TODO(), req)
+				expectErr(t, err, codes.Internal)
+			},
+		},
+		{
+			name: "fail resize",
+			testFunc: func(t *testing.T) {
+				mockCtl := gomock.NewController(t)
+				defer mockCtl.Finish()
+
+				mockMetadata := mocks.NewMockMetadataService(mockCtl)
+				mockResizer := mocks.NewMockResizer(mockCtl)
+				mockMounter := mocks.NewMockMounter(mockCtl)
+
+				awsDriver := &nodeService{
+					metadata: mockMetadata,
+					mounter:  mockMounter,
+					inFlight: internal.NewInFlight(),
+					resizer:  mockResizer,
+				}
+
+				mockMounter.EXPECT().Run(gomock.Any(), gomock.Any()).Return([]byte("/dev/fake"), nil)
+				mockResizer.EXPECT().Resize(gomock.Eq(devicePath), gomock.Eq(deviceMountPath)).Return(false, errors.New("resize of device %s failed"))
+
+				req := &csi.NodeExpandVolumeRequest{
+					StagingTargetPath: targetPath,
+					VolumeId:          "vol-test",
+					VolumePath:        deviceMountPath,
+					VolumeCapability: &csi.VolumeCapability{
+						AccessType: &csi.VolumeCapability_Mount{
+							Mount: &csi.VolumeCapability_MountVolume{},
+						},
+						AccessMode: &csi.VolumeCapability_AccessMode{
+							Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+						},
+					},
+				}
+
+				_, err := awsDriver.NodeExpandVolume(context.TODO(), req)
+				expectErr(t, err, codes.Internal)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, tc.testFunc)
+	}
+}
+
 func TestNodePublishVolume(t *testing.T) {
 	targetPath := "/test/path"
 	stagingTargetPath := "/test/staging/path"

@@ -24,7 +24,7 @@ import (
 	"regexp"
 	"strings"
 
-	csi "github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/kubernetes-sigs/aws-ebs-csi-driver/pkg/cloud"
 	"github.com/kubernetes-sigs/aws-ebs-csi-driver/pkg/driver/internal"
 	"google.golang.org/grpc/codes"
@@ -73,6 +73,7 @@ type nodeService struct {
 	metadata cloud.MetadataService
 	mounter  Mounter
 	inFlight *internal.InFlight
+	resizer  Resizer
 }
 
 // newNodeService creates a new node service
@@ -83,10 +84,17 @@ func newNodeService() nodeService {
 		panic(err)
 	}
 
+	// TODO: refactor Mounter to expose a mount.SafeFormatAndMount object
+	resizer := resizefs.NewResizeFs(&mount.SafeFormatAndMount{
+		Interface: mount.New(""),
+		Exec:      mount.NewOsExec(),
+	})
+
 	return nodeService{
 		metadata: metadata,
 		mounter:  newNodeMounter(),
 		inFlight: internal.NewInFlight(),
+		resizer:  resizer,
 	}
 }
 
@@ -249,11 +257,20 @@ func (d *nodeService) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandV
 		return nil, status.Error(codes.InvalidArgument, "Volume ID not provided")
 	}
 
+	switch req.VolumeCapability.GetAccessType().(type) {
+	case *csi.VolumeCapability_Block:
+		return nil, status.Errorf(codes.FailedPrecondition, "Could not expand the volume using the block device API")
+	}
+
+	mount := req.VolumeCapability.GetMount()
+	if mount == nil {
+		return nil, status.Error(codes.InvalidArgument, "NodeExpandVolume: mount is nil within volume capability")
+	}
+
 	args := []string{"-o", "source", "--noheadings", "--target", req.GetVolumePath()}
 	output, err := d.mounter.Command("findmnt", args...).Output()
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Could not determine device path: %v", err)
-
 	}
 
 	devicePath := strings.TrimSpace(string(output))
@@ -268,7 +285,7 @@ func (d *nodeService) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandV
 	})
 
 	// TODO: lock per volume ID to have some idempotency
-	if _, err := r.Resize(devicePath, req.GetVolumePath()); err != nil {
+	if _, err := d.resizer.Resize(devicePath, req.GetVolumePath()); err != nil {
 		return nil, status.Errorf(codes.Internal, "Could not resize volume %q (%q):  %v", volumeID, devicePath, err)
 	}
 

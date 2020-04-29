@@ -12,6 +12,7 @@ The [Amazon Elastic Block Store](https://aws.amazon.com/ebs/) Container Storage 
 | AWS EBS CSI Driver \ CSI Version       | v0.3.0| v1.0.0 | v1.1.0 |
 |----------------------------------------|-------|--------|--------|
 | master branch                          | no    | no     | yes    |
+| v0.5.0                                 | no    | no     | yes    |
 | v0.4.0                                 | no    | no     | yes    |
 | v0.3.0                                 | no    | yes    | no     |
 | v0.2.0                                 | no    | yes    | no     |
@@ -31,7 +32,7 @@ There are several optional parameters that could be passed into `CreateVolumeReq
 | "csi.storage.k8s.io/fsType" | xfs, ext2, ext3, ext4      | ext4     | File system type that will be formatted during volume creation |
 | "type"                      | io1, gp2, sc1, st1,standard| gp2      | EBS volume type     |
 | "iopsPerGB"                 |                            |          | I/O operations per second per GiB. Required when io1 volume type is specified |
-| "encrypted"                 |                            |          | Whether the volume should be encrypted or not. Valid values are "true" or "false" | 
+| "encrypted"                 |                            |          | Whether the volume should be encrypted or not. Valid values are "true" or "false" |
 | "kmsKeyId"                  |                       |          | The full ARN of the key to use when encrypting the volume. When not specified, the default KMS key is used |
 
 **Notes**:
@@ -44,6 +45,7 @@ Following sections are Kubernetes specific. If you are Kubernetes user, use foll
 | AWS EBS CSI Driver \ Kubernetes Version| v1.12 | v1.13 | v1.14 | v1.15 |
 |----------------------------------------|-------|-------|-------|-------|
 | master branch                          | no    | no+   | yes   | yes   |
+| v0.5.0                                 | no    | no+   | yes   | yes   |
 | v0.4.0                                 | no    | no+   | yes   | yes   |
 | v0.3.0                                 | no    | no+   | yes   | no    |
 | v0.2.0                                 | no    | yes   | yes   | no    |
@@ -55,6 +57,7 @@ Following sections are Kubernetes specific. If you are Kubernetes user, use foll
 |AWS EBS CSI Driver Version | Image                               |
 |---------------------------|-------------------------------------|
 |master branch              |amazon/aws-ebs-csi-driver:latest     |
+|v0.5.0                     |amazon/aws-ebs-csi-driver:v0.5.0     |
 |v0.4.0                     |amazon/aws-ebs-csi-driver:v0.4.0     |
 |v0.3.0                     |amazon/aws-ebs-csi-driver:v0.3.0     |
 |v0.2.0                     |amazon/aws-ebs-csi-driver:0.2.0      |
@@ -62,7 +65,7 @@ Following sections are Kubernetes specific. If you are Kubernetes user, use foll
 
 ## Features
 * **Static Provisioning** - create a new or migrating existing EBS volumes, then create persistence volume (PV) from the EBS volume and consume the PV from container using persistence volume claim (PVC).
-* **Dynamic Provisioning** - uses persistence volume claim (PVC) to request the Kuberenetes to create the EBS volume on behalf of user and consumes the volume from inside container.
+* **Dynamic Provisioning** - uses persistence volume claim (PVC) to request the Kuberenetes to create the EBS volume on behalf of user and consumes the volume from inside container. Storage class's **allowedTopologies** could be used to restrict which AZ the volume should be provisioned in. The topology key should be **topology.ebs.csi.aws.com/zone**.
 * **Mount Option** - mount options could be specified in persistence volume (PV) to define how the volume should be mounted.
 * **NVMe** - consume NVMe EBS volume from EC2 [Nitro instance](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-types.html#ec2-nitro-instances).
 * **Block Volume** (beta since 1.14) - consumes the EBS volume as a raw block device for latency sensitive application eg. MySql
@@ -87,7 +90,7 @@ kubectl apply -f secret.yaml
 ```
 * Using IAM [instance profile](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_switch-role-ec2_instance-profiles.html) - grant all the worker nodes with [proper permission](./example-iam-policy.json) by attaching policy to the instance profile of the worker.
 
-#### Deploy CRD (optinal)
+#### Deploy CRD (optional)
 If your cluster is v1.14+, you can skip this step. Install the `CSINodeInfo` CRD on the cluster:
 ```sh
 kubectl create -f https://raw.githubusercontent.com/kubernetes/csi-api/release-1.13/pkg/crd/manifests/csinodeinfo.yaml
@@ -111,11 +114,13 @@ kubectl get pods -n kube-system
 
 Alternatively, you could also install the driver using helm:
 ```sh
-helm install --name aws-ebs-csi-driver \
+helm install \
+    --namespace kube-system \
+    --name aws-ebs-csi-driver \
     --set enableVolumeScheduling=true \
     --set enableVolumeResizing=true \
     --set enableVolumeSnapshot=true \
-    https://github.com/kubernetes-sigs/aws-ebs-csi-driver/releases/download/v0.4.0/helm-chart.tgz
+    https://github.com/kubernetes-sigs/aws-ebs-csi-driver/releases/download/v0.5.0/helm-chart.tgz
 ```
 
 ## Examples
@@ -133,7 +138,7 @@ Starting from Kubernetes 1.14, CSI migration is supported as alpha feature. If y
 Please go through [CSI Spec](https://github.com/container-storage-interface/spec/blob/master/spec.md) and [General CSI driver development guideline](https://kubernetes-csi.github.io/docs/Development.html) to get some basic understanding of CSI driver before you start.
 
 ### Requirements
-* Golang 1.12.7+
+* Golang 1.14.+
 * [Ginkgo](https://github.com/onsi/ginkgo) in your PATH for integration testing and end-to-end testing
 * Docker 17.05+ for releasing
 
@@ -148,8 +153,8 @@ Dependencies are managed through go module. To build the project, first turn on 
 
 **Notes**:
 * Sanity tests make sure the driver complies with the CSI specification
-* EC2 instance is required to run integration test, since it is exercising the actual flow of creating EBS volume, attaching it and read/write on the disk. See [Ingetration Testing](../tests/integration/README.md) for more details.
-* E22 tests exercises various driver functionalities in Kubernetes cluster. See [E2E Testing](../tests/e2e/README.md) for more details.
+* EC2 instance is required to run integration test, since it is exercising the actual flow of creating EBS volume, attaching it and read/write on the disk. See [Integration Testing](../tests/integration/README.md) for more details.
+* E2E tests exercises various driver functionalities in Kubernetes cluster. See [E2E Testing](../tests/e2e/README.md) for more details.
 
 ### Build and Publish Container Image
 * Build image and push it with latest tag: `make image && make push`

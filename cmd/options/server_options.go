@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2020 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,12 +14,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package options
 
 import (
-	"github.com/aws/aws-k8s-tester/e2e/tester"
+	"flag"
+
+	"github.com/kubernetes-sigs/aws-ebs-csi-driver/pkg/driver"
 )
 
-func main() {
-	tester.Start()
+// ServerOptions contains options and configuration settings for the driver server.
+type ServerOptions struct {
+	// Endpoint is the endpoint that the driver server should listen on.
+	Endpoint string
+}
+
+func (s *ServerOptions) AddFlags(fs *flag.FlagSet) {
+	fs.StringVar(&s.Endpoint, "endpoint", driver.DefaultCSIEndpoint, "Endpoint for the CSI driver server")
 }

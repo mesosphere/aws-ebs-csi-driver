@@ -14,44 +14,54 @@
 
 PKG=github.com/kubernetes-sigs/aws-ebs-csi-driver
 IMAGE?=amazon/aws-ebs-csi-driver
-VERSION=v0.5.0-dirty
+VERSION=v0.6.0-dirty
 GIT_COMMIT?=$(shell git rev-parse HEAD)
 BUILD_DATE?=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 LDFLAGS?="-X ${PKG}/pkg/driver.driverVersion=${VERSION} -X ${PKG}/pkg/driver.gitCommit=${GIT_COMMIT} -X ${PKG}/pkg/driver.buildDate=${BUILD_DATE} -s -w"
 GO111MODULE=on
 GOPROXY=direct
+GOPATH=$(shell go env GOPATH)
+GOBIN=$(shell pwd)/bin
 
 .EXPORT_ALL_VARIABLES:
 
-.PHONY: aws-ebs-csi-driver
-aws-ebs-csi-driver:
+bin/aws-ebs-csi-driver:
 	mkdir -p bin
 	CGO_ENABLED=0 GOOS=linux go build -ldflags ${LDFLAGS} -o bin/aws-ebs-csi-driver ./cmd/
 
-.PHONY: verify
-verify:
-	./hack/verify-all
+bin/mockgen:
+	go get github.com/golang/mock/mockgen@latest
 
-.PHONY: test
+bin/golangci-lint:
+	echo "Installing golangci-lint..."
+	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s v1.21.0
+
+mockgen: bin/mockgen
+	./hack/update-gomock
+
+verify: bin/golangci-lint
+	echo "Running golangci-lint..."
+	./bin/golangci-lint run --deadline=10m
+	echo "Congratulations! All Go source files have been linted."
+
 test:
-	go test -v -race ./pkg/...
+	go test -v -race ./cmd/... ./pkg/...
 
 .PHONY: test-sanity
 test-sanity:
-	go test -v ./tests/sanity/...
-
-.PHONY: test-integration
-test-integration:
-	#./hack/run-integration-test
+	#go test -v ./tests/sanity/...
 	echo "succeed"
 
+bin/k8s-e2e-tester:
+	go get github.com/aws/aws-k8s-tester/e2e/tester/cmd/k8s-e2e-tester@master
+
 .PHONY: test-e2e-single-az
-test-e2e-single-az:
-	TESTCONFIG=./tester/single-az-config.yaml go run tester/cmd/main.go
+test-e2e-single-az: bin/k8s-e2e-tester
+	TESTCONFIG=./tester/single-az-config.yaml ${GOBIN}/k8s-e2e-tester
 
 .PHONY: test-e2e-multi-az
-test-e2e-multi-az:
-	TESTCONFIG=./tester/multi-az-config.yaml go run tester/cmd/main.go
+test-e2e-multi-az: bin/k8s-e2e-tester
+	TESTCONFIG=./tester/multi-az-config.yaml ${GOBIN}/k8s-e2e-tester
 
 .PHONY: test-e2e-migration
 test-e2e-migration:

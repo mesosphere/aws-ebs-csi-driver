@@ -30,8 +30,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/klog"
-	"k8s.io/kubernetes/pkg/util/mount"
 	"k8s.io/kubernetes/pkg/util/resizefs"
+	"k8s.io/utils/exec"
+	"k8s.io/utils/mount"
 )
 
 const (
@@ -121,9 +122,17 @@ func (d *nodeService) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	if mount == nil {
 		return nil, status.Error(codes.InvalidArgument, "NodeStageVolume: mount is nil within volume capability")
 	}
+
 	fsType := mount.GetFsType()
 	if len(fsType) == 0 {
 		fsType = defaultFsType
+	}
+
+	var mountOptions []string
+	for _, f := range mount.MountFlags {
+		if !hasMountOption(mountOptions, f) {
+			mountOptions = append(mountOptions, f)
+		}
 	}
 
 	if ok := d.inFlight.Insert(req); !ok {
@@ -133,6 +142,7 @@ func (d *nodeService) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	defer func() {
 		klog.V(4).Infof("NodeStageVolume: volume=%q operation finished", req.GetVolumeId())
 		d.inFlight.Delete(req)
+		klog.V(4).Info("donedone")
 	}()
 
 	devicePath, ok := req.PublishContext[DevicePathKey]
@@ -181,7 +191,7 @@ func (d *nodeService) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 
 	// FormatAndMount will format only if needed
 	klog.V(5).Infof("NodeStageVolume: formatting %s and mounting at %s with fstype %s", source, target, fsType)
-	err = d.mounter.FormatAndMount(source, target, fsType, nil)
+	err = d.mounter.FormatAndMount(source, target, fsType, mountOptions)
 	if err != nil {
 		msg := fmt.Sprintf("could not format %q and mount it at %q", source, target)
 		return nil, status.Error(codes.Internal, msg)
@@ -240,7 +250,7 @@ func (d *nodeService) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandV
 	}
 
 	args := []string{"-o", "source", "--noheadings", "--target", req.GetVolumePath()}
-	output, err := d.mounter.Run("findmnt", args...)
+	output, err := d.mounter.Command("findmnt", args...).Output()
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Could not determine device path: %v", err)
 
@@ -254,7 +264,7 @@ func (d *nodeService) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandV
 	// TODO: refactor Mounter to expose a mount.SafeFormatAndMount object
 	r := resizefs.NewResizeFs(&mount.SafeFormatAndMount{
 		Interface: mount.New(""),
-		Exec:      mount.NewOsExec(),
+		Exec:      exec.New(),
 	})
 
 	// TODO: lock per volume ID to have some idempotency
@@ -420,16 +430,8 @@ func (d *nodeService) nodePublishVolumeForFileSystem(req *csi.NodePublishVolumeR
 	target := req.GetTargetPath()
 	source := req.GetStagingTargetPath()
 	if m := mode.Mount; m != nil {
-		hasOption := func(options []string, opt string) bool {
-			for _, o := range options {
-				if o == opt {
-					return true
-				}
-			}
-			return false
-		}
 		for _, f := range m.MountFlags {
-			if !hasOption(mountOptions, f) {
+			if !hasMountOption(mountOptions, f) {
 				mountOptions = append(mountOptions, f)
 			}
 		}
@@ -459,7 +461,7 @@ func (d *nodeService) nodePublishVolumeForFileSystem(req *csi.NodePublishVolumeR
 // findDevicePath finds path of device and verifies its existence
 // if the device is not nvme, return the path directly
 // if the device is nvme, finds and returns the nvme device path eg. /dev/nvme1n1
-func (d *nodeService) findDevicePath(devicePath, volumeId string) (string, error) {
+func (d *nodeService) findDevicePath(devicePath, volumeID string) (string, error) {
 	exists, err := d.mounter.ExistsPath(devicePath)
 	if err != nil {
 		return "", err
@@ -474,7 +476,7 @@ func (d *nodeService) findDevicePath(devicePath, volumeId string) (string, error
 	// This is the magic name on which AWS presents NVME devices under /dev/disk/by-id/
 	// For example, vol-0fab1d5e3f72a5e23 creates a symlink at
 	// /dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_vol0fab1d5e3f72a5e23
-	nvmeName := "nvme-Amazon_Elastic_Block_Store_" + strings.Replace(volumeId, "-", "", -1)
+	nvmeName := "nvme-Amazon_Elastic_Block_Store_" + strings.Replace(volumeID, "-", "", -1)
 
 	return findNvmeVolume(nvmeName)
 }
@@ -518,4 +520,16 @@ func (d *nodeService) getVolumesLimit() int64 {
 		return defaultMaxEBSNitroVolumes
 	}
 	return defaultMaxEBSVolumes
+}
+
+// hasMountOption returns a boolean indicating whether the given
+// slice already contains a mount option. This is used to prevent
+// passing duplicate option to the mount command.
+func hasMountOption(options []string, opt string) bool {
+	for _, o := range options {
+		if o == opt {
+			return true
+		}
+	}
+	return false
 }

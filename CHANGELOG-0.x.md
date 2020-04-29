@@ -1,3 +1,43 @@
+# v0.5.0
+[Documentation](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/blob/v0.5.0/docs/README.md)
+
+filename  | sha512 hash
+--------- | ------------
+[v0.5.0.zip](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/archive/v0.5.0.zip) | `c53327e090352a7f79ee642dbf8c211733f4a2cb78968ec688a1eade55151e65f1f97cd228d22168317439f1db9f3d2f07dcaa2873f44732ad23aaf632cbef3a`
+[v0.5.0.tar.gz](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/archive/v0.5.0.tar.gz) | `ec4963d34c601cdf718838d90b8aa6f36b16c9ac127743e73fbe76118a606d41aced116aaaab73370c17bcc536945d5ccd735bc5a4a00f523025c8e41ddedcb8`
+
+## Notable changes
+### New features
+* Add a cmdline option to add extra volume tags ([#353](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/353), [@jieyu](https://github.com/jieyu))
+* Switch to use kustomize for manifest ([#360](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/360), [@leakingtapan](https://github.com/leakingtapan))
+* enable users to set ec2-endpoint for nonstandard regions ([#369](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/369), [@amdonov](https://github.com/amdonov))
+* Add standard volume type ([#379](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/379), [@leakingtapan](https://github.com/leakingtapan))
+* Update aws sdk version to enable EKS IAM for SA ([#386](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/386), [@leakingtapan](https://github.com/leakingtapan))
+* Implement different driver modes and AWS Region override for controller service ([#438](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/438), [@rfranzke](https://github.com/rfranzke))
+* Add manifest files for snapshotter 2.0 ([#452](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/452), [@leakingtapan](https://github.com/leakingtapan))
+
+### Bug fixes
+* Return success if instance or volume are not found ([#375](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/375), [@bertinatto](https://github.com/bertinatto))
+* Patch k8scsi sidecars CVE-2019-11255 ([#413](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/413), [@jnaulty](https://github.com/jnaulty))
+* Handle mount flags in NodeStageVolume ([#430](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/430), [@bertinatto](https://github.com/bertinatto))
+
+### Improvements
+* Run upstream e2e test suites with migration  ([#341](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/341), [@wongma7](https://github.com/wongma7))
+* Use new test framework for test orchestration ([#359](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/359), [@leakingtapan](https://github.com/leakingtapan))
+* Update to use 1.16 cluster with inline test enabled ([#362](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/362), [@leakingtapan](https://github.com/leakingtapan))
+* Enable leader election ([#380](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/380), [@leakingtapan](https://github.com/leakingtapan))
+* Update go mod and mount library ([#388](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/388), [@leakingtapan](https://github.com/leakingtapan))
+* Refactor NewCloud by pass in region ([#394](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/394), [@leakingtapan](https://github.com/leakingtapan))
+* helm: provide an option to set extra volume tags ([#396](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/396), [@jieyu](https://github.com/jieyu))
+* Allow override for csi-provisioner image ([#401](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/401), [@gliptak](https://github.com/gliptak))
+* Enable volume expansion e2e test for CSI migration ([#407](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/407), [@leakingtapan](https://github.com/leakingtapan))
+* Swith to use kops 1.16 ([#409](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/409), [@leakingtapan](https://github.com/leakingtapan))
+* Added tolerations for node support ([#420](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/420), [@zerkms](https://github.com/zerkms))
+* Update helm chart to better match available values and add the ability to add annotations ([#423](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/423), [@krmichel](https://github.com/krmichel))
+* [helm] Also add toleration support to controller ([#433](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/433), [@jyaworski](https://github.com/jyaworski))
+* Add ec2:ModifyVolume action ([#434](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/434), [@zodiac12k](https://github.com/zodiac12k))
+* Schedule the EBS CSI DaemonSet on all nodes by default ([#441](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/pull/441), [@pcfens](https://github.com/pcfens))
+
 # v0.4.0
 [Documentation](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/blob/v0.4.0/docs/README.md)
 

@@ -15,33 +15,44 @@ limitations under the License.
 package e2e
 
 import (
+	"flag"
 	"fmt"
-	"github.com/onsi/ginkgo/config"
-	"github.com/onsi/ginkgo/reporters"
 	"log"
+	"math/rand"
 	"os"
 	"path"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/onsi/ginkgo/config"
+	"github.com/onsi/ginkgo/reporters"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/kubernetes/test/e2e/framework"
+	frameworkconfig "k8s.io/kubernetes/test/e2e/framework/config"
 )
 
 const kubeconfigEnvVar = "KUBECONFIG"
 
 func init() {
+	rand.Seed(time.Now().UTC().UnixNano())
+	testing.Init()
 	// k8s.io/kubernetes/test/e2e/framework requires env KUBECONFIG to be set
 	// it does not fall back to defaults
 	if os.Getenv(kubeconfigEnvVar) == "" {
 		kubeconfig := filepath.Join(os.Getenv("HOME"), ".kube", "config")
 		os.Setenv(kubeconfigEnvVar, kubeconfig)
 	}
-	framework.HandleFlags()
 	framework.AfterReadingAllFlags(&framework.TestContext)
+
+	frameworkconfig.CopyFlags(frameworkconfig.Flags, flag.CommandLine)
+	framework.RegisterCommonFlags(flag.CommandLine)
+	framework.RegisterClusterFlags(flag.CommandLine)
+	flag.Parse()
 }
 
 func TestE2E(t *testing.T) {
